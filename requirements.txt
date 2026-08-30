@@ -1,0 +1,13 @@
+streamlit
+mysql-connector-python
+chromadb
+sentence-transformers
+torch
+transformers
+langchain
+langchain-core
+langchain-groq
+groq
+python-dotenv
+huggingface-hub
+pandas
