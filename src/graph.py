@@ -5,7 +5,6 @@ from langgraph.graph import StateGraph, START, END
 from query_planner import plan_query
 from execution_engine import execute_plan
 from result_evaluator import evaluate_results
-from response_formatter import format_response
 
 class ProductSearchState(TypedDict, total=False):
 
@@ -14,33 +13,10 @@ class ProductSearchState(TypedDict, total=False):
     plan: dict
     results: list
     evaluation: dict
-
     retry_count: int
-
+    relaxations: list
     original_constraints: dict
-
     final_response: dict
-
-def planner_node(state: ProductSearchState):
-
-    plan = plan_query(state["query"])
-
-    # Deep-ish copy so the original is never modified
-    original_plan = {
-        **plan,
-        "structured_constraints": {
-            **plan.get("structured_constraints", {})
-        },
-        "semantic_constraints": list(
-            plan.get("semantic_constraints", [])
-        )
-    }
-
-    return {
-        "plan": plan,
-        "original_plan": original_plan,
-        "relaxations": []
-    }
 
 def planner_node(state: ProductSearchState):
 
