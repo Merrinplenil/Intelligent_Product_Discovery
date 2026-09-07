@@ -9,7 +9,6 @@ from result_evaluator import evaluate_results
 class ProductSearchState(TypedDict, total=False):
 
     query: str
-
     plan: dict
     results: list
     evaluation: dict
@@ -166,7 +165,8 @@ def retry_node(state: ProductSearchState):
     return {
         "plan": plan,
         "results": results,
-        "retry_count": retry_count
+        "retry_count": retry_count,
+        "relaxations": relaxations
     }
 def route_after_evaluation(state: ProductSearchState):
 
