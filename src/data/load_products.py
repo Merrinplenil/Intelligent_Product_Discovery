@@ -1,12 +1,18 @@
+import logging
+
 import pandas as pd
 
-from connection import get_connection
+from src.config.connection import get_connection
+
+
+logger = logging.getLogger(__name__)
 
 
 CSV_PATH = "data/ikea_products_cleaned.csv"
 
 
 def load_products():
+
     df = pd.read_csv(CSV_PATH)
 
     # Convert Pandas NaN values to None so MySQL stores them as NULL
@@ -38,7 +44,7 @@ def load_products():
         )
         VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s
         )
     """
 
@@ -72,18 +78,38 @@ def load_products():
     total_inserted = 0
 
     for start in range(0, len(records), batch_size):
+
         batch = records[start:start + batch_size]
 
-        cursor.executemany(query, batch)
+        cursor.executemany(
+            query,
+            batch
+        )
+
         connection.commit()
 
         total_inserted += len(batch)
 
-        print(f"Inserted {total_inserted} / {len(records)} products")
+        logger.info(
+            "Inserted %d / %d products",
+            total_inserted,
+            len(records)
+        )
 
     cursor.close()
     connection.close()
 
+    logger.info(
+        "Product loading completed. Total inserted: %d",
+        total_inserted
+    )
+
 
 if __name__ == "__main__":
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
+
     load_products()

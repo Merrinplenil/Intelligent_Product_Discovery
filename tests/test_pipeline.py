@@ -1,7 +1,7 @@
-from execution_engine import execute_plan
-from query_planner import plan_query
-from result_evaluator import evaluate_results
 
+from src.core.execution_engine import execute_plan
+from src.core.query_planner import plan_query
+from src.core.result_evaluator import evaluate_results
 
 test_queries = [
     "living room furniture under $200",

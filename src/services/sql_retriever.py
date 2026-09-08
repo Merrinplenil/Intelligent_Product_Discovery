@@ -1,7 +1,10 @@
-from .connection import get_connection
+import logging
+
+from src.config.connection import get_connection
+from src.config.category_rules import CATEGORY_PATTERNS
 
 
-print("LOADED SQL RETRIEVER:", __file__)
+logger = logging.getLogger(__name__)
 
 
 def get_products(
@@ -13,8 +16,11 @@ def get_products(
     limit=10
 ):
 
-    print("SQL category received:", category)
-    print("SQL candidate IDs received:", candidate_ids)
+    logger.info(
+        "SQL search started. category=%s, candidate_ids=%s",
+        category,
+        candidate_ids
+    )
 
     connection = get_connection()
     cursor = connection.cursor(dictionary=True)
@@ -36,6 +42,7 @@ def get_products(
     # --------------------------------------------------
     # Candidate IDs from Vector search
     # --------------------------------------------------
+
     if candidate_ids:
 
         placeholders = ",".join(
@@ -48,75 +55,25 @@ def get_products(
 
         params.extend(candidate_ids)
 
-    # --------------------------------------------------
-    # Category patterns
-    # --------------------------------------------------
-    category_patterns = {
-
-        "chair": [
-            "chairs"
-        ],
-
-        "chairs": [
-            "chairs"
-        ],
-
-        "desk": [
-            "desks & computer desks"
-        ],
-
-        "desks": [
-            "desks & computer desks"
-        ],
-
-        "office desk": [
-            "office desks & tables"
-        ],
-
-        "table": [
-            "tables & desks"
-        ],
-
-        "tables": [
-            "tables & desks"
-        ],
-
-        "dining table": [
-            "dining tables"
-        ],
-
-        "living room": [
-            "sofas & sectionals/fabric sofas",
-            "sofas & sectionals/leather & faux leather sofas",
-            "coffee tables",
-            "tv & media furniture",
-            "armchairs & accent chairs",
-            "side tables"
-        ],
-
-        "sofa": [
-            "sofas & sectionals"
-        ],
-
-        "bed": [
-            "beds"
-        ]
-    }
-
+    
     # --------------------------------------------------
     # Category filter
     # --------------------------------------------------
+
     if category is not None:
 
         category_lower = category.lower()
-
-        patterns = category_patterns.get(
+        
+        patterns = CATEGORY_PATTERNS.get(
             category_lower,
             [category_lower]
         )
 
-        print("CATEGORY:", category)
-        print("PATTERNS:", patterns)
+        logger.info(
+            "Category=%s, patterns=%s",
+            category,
+            patterns
+        )
 
         conditions = " OR ".join(
             [
@@ -130,6 +87,7 @@ def get_products(
         """
 
         for pattern in patterns:
+
             params.append(
                 f"%{pattern.lower()}%"
             )
@@ -137,6 +95,7 @@ def get_products(
     # --------------------------------------------------
     # Desk-specific filtering
     # --------------------------------------------------
+
     if (
         category is not None
         and category.lower() in ["desk", "desks"]
@@ -161,6 +120,7 @@ def get_products(
     # --------------------------------------------------
     # Office desk filtering
     # --------------------------------------------------
+
     if (
         category is not None
         and category.lower() == "office desk"
@@ -176,6 +136,7 @@ def get_products(
     # Living room filtering
     # Remove accessories, hardware and furniture parts
     # --------------------------------------------------
+
     if (
         category is not None
         and category.lower() == "living room"
@@ -215,6 +176,7 @@ def get_products(
     # --------------------------------------------------
     # Sofa-specific filtering
     # --------------------------------------------------
+
     if (
         category is not None
         and category.lower() == "sofa"
@@ -253,6 +215,7 @@ def get_products(
     # --------------------------------------------------
     # Subcategory filter
     # --------------------------------------------------
+
     if subcategory is not None:
 
         query += """
@@ -266,6 +229,7 @@ def get_products(
     # --------------------------------------------------
     # Price filter
     # --------------------------------------------------
+
     if max_price is not None:
 
         query += """
@@ -277,6 +241,7 @@ def get_products(
     # --------------------------------------------------
     # Availability filter
     # --------------------------------------------------
+
     if availability is not None:
 
         query += """
@@ -288,6 +253,7 @@ def get_products(
     # --------------------------------------------------
     # Sorting + limit
     # --------------------------------------------------
+
     query += """
         ORDER BY product_price ASC
         LIMIT %s
@@ -296,22 +262,24 @@ def get_products(
     params.append(limit)
 
     # --------------------------------------------------
-    # DEBUG
-    # --------------------------------------------------
-    print("\nFINAL SQL:")
-    print(query)
-
-    print("\nSQL PARAMS:")
-    print(params)
-
-    # --------------------------------------------------
     # Execute
     # --------------------------------------------------
+
+    logger.debug(
+        "Executing SQL query with parameters: %s",
+        params
+    )
+
     cursor.execute(query, params)
 
     products = cursor.fetchall()
 
     cursor.close()
     connection.close()
+
+    logger.info(
+        "SQL search completed. Products found: %d",
+        len(products)
+    )
 
     return products

@@ -1,15 +1,15 @@
-import os
+import logging
+import re
 from typing import Optional
 
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.config.settings import GROQ_API_KEY
 
-load_dotenv()
 
-
+logger = logging.getLogger(__name__)
 # --------------------------------------------------
 # Structured output schema
 # --------------------------------------------------
@@ -45,11 +45,10 @@ class QueryPlan(BaseModel):
 # --------------------------------------------------
 # Groq model
 # --------------------------------------------------
-
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
     temperature=0,
-    api_key=os.getenv("GROQ_API_KEY")
+    api_key=GROQ_API_KEY
 )
 
 # --------------------------------------------------
@@ -96,7 +95,6 @@ Semantic constraints can include:
 3. Execution plan
 
 Available execution plans:
-
 
 SQL_ONLY
 
@@ -308,7 +306,6 @@ Return a plan matching the required schema.
 ])
 
 
-
 # --------------------------------------------------
 # Structured LLM
 # --------------------------------------------------
@@ -317,18 +314,133 @@ structured_llm = llm.with_structured_output(QueryPlan)
 
 planner = prompt | structured_llm
 
+def validate_query_plan(query: str, plan: dict) -> dict:
+    """
+    Validate important constraints extracted from the user query.
+    """
+
+    query_lower = query.lower()
+
+    # --------------------------------------------------
+    # Validate price constraint
+    # --------------------------------------------------
+
+    price_match = re.search(
+    r"(?:under|below|less than|up to|max(?:imum)?(?: price)?|within)[ ]*\$?[ ]*([0-9]+(?:\.[0-9]+)?)",
+    query_lower
+    )
+
+    if price_match:
+        expected_price = float(price_match.group(1))
+
+        structured_constraints = plan.setdefault(
+            "structured_constraints",
+            {}
+        )
+
+        actual_price = structured_constraints.get("max_price")
+
+        if actual_price is None:
+            logger.warning(
+                "Price constraint missing from planner output. "
+                "Expected max_price=%s",
+                expected_price
+            )
+
+            structured_constraints["max_price"] = expected_price
+
+        else:
+            try:
+                actual_price = float(actual_price)
+
+                if actual_price != expected_price:
+                    logger.warning(
+                        "Incorrect max_price from planner. "
+                        "Expected %s, got %s",
+                        expected_price,
+                        actual_price
+                    )
+
+                    structured_constraints["max_price"] = expected_price
+
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid max_price returned by planner: %s",
+                    actual_price
+                )
+
+                structured_constraints["max_price"] = expected_price
+
+    # --------------------------------------------------
+    # Validate execution plan
+    # --------------------------------------------------
+
+    valid_plans = {
+        "SQL_ONLY",
+        "VECTOR_ONLY",
+        "SQL_TO_VECTOR",
+        "VECTOR_TO_SQL",
+    }
+
+    if plan.get("execution_plan") not in valid_plans:
+        logger.warning(
+            "Invalid execution plan returned: %s",
+            plan.get("execution_plan")
+        )
+
+        plan["execution_plan"] = "VECTOR_ONLY"
+
+    # --------------------------------------------------
+    # Validate intent
+    # --------------------------------------------------
+
+    if not plan.get("intent"):
+        plan["intent"] = "product_search"
+
+    return plan
 
 # --------------------------------------------------
 # Public planner function
 # --------------------------------------------------
-
 def plan_query(query: str):
+    try:
+        plan = planner.invoke({
+            "query": query
+        })
 
-    plan = planner.invoke({
-        "query": query
-    })
+    except Exception as exc:
+        logger.error(
+            "Query planner failed for '%s': %s",
+            query,
+            exc
+        )
 
-    return plan.model_dump()
+        fallback_plan = {
+            "intent": "product_search",
+            "structured_constraints": {},
+            "semantic_constraints": [query],
+            "execution_plan": "VECTOR_ONLY",
+            "limit": 10
+        }
+
+        return validate_query_plan(
+            query,
+            fallback_plan
+        )
+
+    plan_dict = plan.model_dump()
+
+    plan_dict = validate_query_plan(
+        query,
+        plan_dict
+    )
+
+    logger.info(
+        "Query plan generated and validated successfully for: %s",
+        query
+    )
+
+    return plan_dict
 
 
 # --------------------------------------------------
@@ -336,6 +448,11 @@ def plan_query(query: str):
 # --------------------------------------------------
 
 if __name__ == "__main__":
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
 
     queries = [
 

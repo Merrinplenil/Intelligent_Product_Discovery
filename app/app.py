@@ -1,18 +1,6 @@
 import streamlit as st
-import sys
-import os
 
-
-# ADD SRC FOLDER TO PYTHON PATH
-sys.path.append(
-    os.path.join(
-        os.path.dirname(__file__),
-        "src"
-    )
-)
-
-from execution_engine import search
-
+from src.core.execution_engine import search
 
 
 # PAGE CONFIG
@@ -24,9 +12,7 @@ st.set_page_config(
 )
 
 
-
 # MODERN IKEA-INSPIRED STYLE
-
 
 st.markdown("""
 <style>
@@ -153,9 +139,7 @@ h2, h3 {
 """, unsafe_allow_html=True)
 
 
-
 # HEADER
-
 
 st.title("🛋️ Intelligent Product Discovery")
 
@@ -169,9 +153,7 @@ Discover products using natural language search
 """, unsafe_allow_html=True)
 
 
-
 # SEARCH SECTION
-
 
 search_col, button_col = st.columns([5, 1])
 
@@ -194,8 +176,8 @@ with button_col:
         "🔍 Search"
     )
 
-# SEARCH
 
+# SEARCH
 
 if search_clicked:
 
@@ -228,9 +210,8 @@ if search_clicked:
                 st.stop()
 
 
-        
         # RESULTS HEADER
-       
+
         st.markdown(
             f'<h3 style="margin-top:40px;">'
             f'Results for: "{query}"'
@@ -239,9 +220,7 @@ if search_clicked:
         )
 
 
-       
         # SEARCH METRICS
-        
 
         col1, col2, col3 = st.columns(3)
 
@@ -278,9 +257,7 @@ if search_clicked:
             )
 
 
-    
         # QUERY PLAN
-        
 
         with st.expander(
             "⚙️ View Search Details"
@@ -289,9 +266,7 @@ if search_clicked:
             st.json(plan)
 
 
-
         # PRODUCTS
-        
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -307,10 +282,7 @@ if search_clicked:
 
             for product in results:
 
-
-                
                 # PRODUCT DATA
-       
 
                 title = product.get(
                     "product_title",
@@ -343,18 +315,14 @@ if search_clicked:
                 )
 
 
-                
                 # PRODUCT CARD LAYOUT
-               
 
                 card_col1, card_col2 = st.columns(
                     [4, 1]
                 )
 
 
-              
                 # PRODUCT DETAILS
-                
 
                 with card_col1:
 
@@ -380,9 +348,7 @@ if search_clicked:
                     )
 
 
-                
                 # PRICE
-     
 
                 with card_col2:
 
@@ -396,9 +362,7 @@ ${price}
                     )
 
 
-              
                     # PRODUCT LINK
-                    
 
                     if product_url:
 
@@ -409,9 +373,7 @@ ${price}
                         )
 
 
-          
                 # SPACE BETWEEN PRODUCTS
-           
 
                 st.markdown(
                     "<br>",

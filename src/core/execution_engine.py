@@ -1,7 +1,12 @@
-from database.sql_retriever import get_products
-from embeddings.vector_retriever import search_products
-from result_evaluator import evaluate_results
-from query_planner import plan_query
+import logging
+
+from src.services.sql_retriever import get_products
+from src.services.vector_retriever import search_products
+from src.core.result_evaluator import evaluate_results
+from src.core.query_planner import plan_query
+
+
+logger = logging.getLogger(__name__)
 
 
 def execute_plan(plan):
@@ -50,8 +55,8 @@ def execute_plan(plan):
 
     elif execution_plan == "SQL_TO_VECTOR":
 
-        print(
-            "Structured constraints:",
+        logger.info(
+            "Executing SQL_TO_VECTOR with structured constraints: %s",
             structured
         )
 
@@ -65,8 +70,8 @@ def execute_plan(plan):
             limit=50
         )
 
-        print(
-            "SQL candidates:",
+        logger.info(
+            "SQL candidates found: %d",
             len(sql_results)
         )
 
@@ -106,8 +111,8 @@ def execute_plan(plan):
             + semantic
         )
 
-        print(
-            "Semantic query:",
+        logger.info(
+            "Executing VECTOR_TO_SQL with semantic query: %s",
             semantic_query
         )
 
@@ -209,6 +214,11 @@ def search(query):
 # ======================================================
 
 if __name__ == "__main__":
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
 
     query = "cosy furniture for a reading corner"
 

@@ -1,10 +1,15 @@
+import logging
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
-from query_planner import plan_query
-from execution_engine import execute_plan
-from result_evaluator import evaluate_results
+from src.core.query_planner import plan_query
+from src.core.execution_engine import execute_plan
+from src.core.result_evaluator import evaluate_results
+
+
+logger = logging.getLogger(__name__)
+
 
 class ProductSearchState(TypedDict, total=False):
 
@@ -16,6 +21,7 @@ class ProductSearchState(TypedDict, total=False):
     relaxations: list
     original_constraints: dict
     final_response: dict
+
 
 def planner_node(state: ProductSearchState):
 
@@ -45,6 +51,7 @@ def planner_node(state: ProductSearchState):
 
     return update
 
+
 def executor_node(state: ProductSearchState):
 
     results = execute_plan(state["plan"])
@@ -59,10 +66,12 @@ def evaluator_node(state: ProductSearchState):
     evaluation = evaluate_results(
         state["results"],
         structured_constraints=state["plan"].get(
-            "structured_constraints", {}
+            "structured_constraints",
+            {}
         ),
         semantic_constraints=state["plan"].get(
-            "semantic_constraints", []
+            "semantic_constraints",
+            []
         )
     )
 
@@ -70,27 +79,44 @@ def evaluator_node(state: ProductSearchState):
         "evaluation": evaluation
     }
 
+
 def retry_node(state: ProductSearchState):
-    relaxations = list(state.get("relaxations", []))
-    print("\n=== RETRY NODE ===")
 
-    retry_count = state.get("retry_count", 0) + 1
+    relaxations = list(
+        state.get("relaxations", [])
+    )
 
-    print("Retry count:", retry_count)
+    retry_count = (
+        state.get("retry_count", 0) + 1
+    )
+
+    logger.info(
+        "Retry node started. Retry count: %d",
+        retry_count
+    )
 
     # Copy the plan safely
     plan = {
         **state["plan"],
         "structured_constraints": {
-            **state["plan"].get("structured_constraints", {})
+            **state["plan"].get(
+                "structured_constraints",
+                {}
+            )
         },
         "semantic_constraints": list(
-            state["plan"].get("semantic_constraints", [])
+            state["plan"].get(
+                "semantic_constraints",
+                []
+            )
         )
     }
 
     constraints = plan["structured_constraints"]
-    semantic_constraints = plan["semantic_constraints"]
+
+    semantic_constraints = plan[
+        "semantic_constraints"
+    ]
 
     # -----------------------------------
     # Retry strategy
@@ -104,15 +130,16 @@ def retry_node(state: ProductSearchState):
             old_price = constraints["max_price"]
             new_price = old_price * 2
 
-            print(
-                f"Relaxing max price: "
-                f"${old_price} → ${new_price}"
+            logger.info(
+                "Relaxing max price: $%s -> $%s",
+                old_price,
+                new_price
             )
 
             constraints["max_price"] = new_price
 
             relaxations.append(
-                 f"max_price: ${old_price} → ${new_price}"
+                f"max_price: ${old_price} -> ${new_price}"
             )
 
     elif retry_count == 2:
@@ -123,9 +150,10 @@ def retry_node(state: ProductSearchState):
             old_price = constraints["max_price"]
             new_price = old_price * 2
 
-            print(
-                f"Relaxing max price: "
-                f"${old_price} → ${new_price}"
+            logger.info(
+                "Relaxing max price: $%s -> $%s",
+                old_price,
+                new_price
             )
 
             constraints["max_price"] = new_price
@@ -135,16 +163,18 @@ def retry_node(state: ProductSearchState):
         # Remove strongest semantic constraint
         if semantic_constraints:
 
-           
-            removed_constraint = semantic_constraints.pop(0)
+            removed_constraint = (
+                semantic_constraints.pop(0)
+            )
 
-            print(
-                "Relaxing semantic constraint:",
+            logger.info(
+                "Relaxing semantic constraint: %s",
                 removed_constraint
             )
 
             relaxations.append(
-                f"removed semantic constraint: {removed_constraint}"
+                "removed semantic constraint: "
+                f"{removed_constraint}"
             )
 
     elif retry_count == 4:
@@ -152,10 +182,12 @@ def retry_node(state: ProductSearchState):
         # Remove another semantic constraint
         if semantic_constraints:
 
-            removed_constraint = semantic_constraints.pop(0)
+            removed_constraint = (
+                semantic_constraints.pop(0)
+            )
 
-            print(
-                "Relaxing semantic constraint:",
+            logger.info(
+                "Relaxing semantic constraint: %s",
                 removed_constraint
             )
 
@@ -168,42 +200,76 @@ def retry_node(state: ProductSearchState):
         "retry_count": retry_count,
         "relaxations": relaxations
     }
-def route_after_evaluation(state: ProductSearchState):
 
-    confidence = state["evaluation"].get("confidence", 0)
-    retry_count = state.get("retry_count", 0)
 
-    print("\n=== ROUTING ===")
-    print("Confidence:", confidence)
-    print("Retry count:", retry_count)
+def route_after_evaluation(
+    state: ProductSearchState
+):
+
+    confidence = state["evaluation"].get(
+        "confidence",
+        0
+    )
+
+    retry_count = state.get(
+        "retry_count",
+        0
+    )
+
+    logger.info(
+        "Routing evaluation: confidence=%.2f, retry_count=%d",
+        confidence,
+        retry_count
+    )
 
     if confidence >= 0.7:
-        print("Route: END")
+
+        logger.info("Route: END")
         return "end"
 
     if retry_count >= 4:
-        print("Maximum retries reached")
-        print("Route: END")
+
+        logger.info(
+            "Maximum retries reached. Route: END"
+        )
+
         return "end"
 
-    print("Route: RETRY")
+    logger.info("Route: RETRY")
+
     return "retry"
+
+
 def response_node(state: ProductSearchState):
 
     evaluation = state["evaluation"]
     results = state["results"]
 
-    confidence = evaluation.get("confidence", 0)
-    result_count = evaluation.get("result_count", 0)
+    confidence = evaluation.get(
+        "confidence",
+        0
+    )
+
+    result_count = evaluation.get(
+        "result_count",
+        0
+    )
 
     # Determine final status
     if result_count == 0:
+
         status = "NO_MATCH"
+
     elif confidence >= 0.9:
+
         status = "STRONG_MATCH"
+
     elif confidence >= 0.6:
+
         status = "GOOD_MATCH"
+
     else:
+
         status = "WEAK_MATCH"
 
     original_constraints = state.get(
@@ -216,21 +282,27 @@ def response_node(state: ProductSearchState):
 
     final_constraints = {
         "structured": state["plan"].get(
-            "structured_constraints", {}
+            "structured_constraints",
+            {}
         ),
         "semantic": state["plan"].get(
-            "semantic_constraints", []
+            "semantic_constraints",
+            []
         )
     }
 
     relaxations = []
 
     original_max_price = (
-        original_constraints["structured"].get("max_price")
+        original_constraints[
+            "structured"
+        ].get("max_price")
     )
 
     final_max_price = (
-        final_constraints["structured"].get("max_price")
+        final_constraints[
+            "structured"
+        ].get("max_price")
     )
 
     if (
@@ -238,24 +310,34 @@ def response_node(state: ProductSearchState):
         and final_max_price is not None
         and final_max_price > original_max_price
     ):
+
         relaxations.append(
-            f"Maximum price relaxed from "
-            f"${original_max_price} to ${final_max_price}"
+            "Maximum price relaxed from "
+            f"${original_max_price} to "
+            f"${final_max_price}"
         )
 
-    original_semantic = original_constraints.get(
-        "semantic", []
+    original_semantic = (
+        original_constraints.get(
+            "semantic",
+            []
+        )
     )
 
-    final_semantic = final_constraints.get(
-        "semantic", []
+    final_semantic = (
+        final_constraints.get(
+            "semantic",
+            []
+        )
     )
 
     for constraint in original_semantic:
 
         if constraint not in final_semantic:
+
             relaxations.append(
-                f"Semantic preference relaxed: {constraint}"
+                "Semantic preference relaxed: "
+                f"{constraint}"
             )
 
     response = {
@@ -268,37 +350,78 @@ def response_node(state: ProductSearchState):
         "products": results
     }
 
-    print("\n=== FINAL RESPONSE ===")
-    print(response)
+    logger.info(
+        "Final response generated: status=%s, confidence=%.2f, results=%d",
+        status,
+        confidence,
+        result_count
+    )
 
     return {
         "final_response": response
     }
 
-    
+
 # ---------------------------------------
 # Build graph
 # ---------------------------------------
-graph_builder = StateGraph(ProductSearchState)
 
-graph_builder.add_node("planner", planner_node)
-graph_builder.add_node("executor", executor_node)
-graph_builder.add_node("evaluator", evaluator_node)
-graph_builder.add_node("retry", retry_node)
-graph_builder.add_node("response", response_node)
+graph_builder = StateGraph(
+    ProductSearchState
+)
+
+graph_builder.add_node(
+    "planner",
+    planner_node
+)
+
+graph_builder.add_node(
+    "executor",
+    executor_node
+)
+
+graph_builder.add_node(
+    "evaluator",
+    evaluator_node
+)
+
+graph_builder.add_node(
+    "retry",
+    retry_node
+)
+
+graph_builder.add_node(
+    "response",
+    response_node
+)
 
 
-# START → Planner
-graph_builder.add_edge(START, "planner")
+# START -> Planner
 
-# Planner → Executor
-graph_builder.add_edge("planner", "executor")
-
-# Executor → Evaluator
-graph_builder.add_edge("executor", "evaluator")
+graph_builder.add_edge(
+    START,
+    "planner"
+)
 
 
-# Evaluator → Response OR Retry
+# Planner -> Executor
+
+graph_builder.add_edge(
+    "planner",
+    "executor"
+)
+
+
+# Executor -> Evaluator
+
+graph_builder.add_edge(
+    "executor",
+    "evaluator"
+)
+
+
+# Evaluator -> Response OR Retry
+
 graph_builder.add_conditional_edges(
     "evaluator",
     route_after_evaluation,
@@ -309,12 +432,20 @@ graph_builder.add_conditional_edges(
 )
 
 
-# Retry → Evaluator
-graph_builder.add_edge("retry", "evaluator")
+# Retry -> Evaluator
+
+graph_builder.add_edge(
+    "retry",
+    "evaluator"
+)
 
 
-# Response → END
-graph_builder.add_edge("response", END)
+# Response -> END
+
+graph_builder.add_edge(
+    "response",
+    END
+)
 
 
 graph = graph_builder.compile()
@@ -323,9 +454,18 @@ graph = graph_builder.compile()
 # ---------------------------------------
 # Run graph
 # ---------------------------------------
+
 if __name__ == "__main__":
 
-    query = "ultra luxury Scandinavian living room sofa under $50"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s"
+    )
+
+    query = (
+        "ultra luxury Scandinavian "
+        "living room sofa under $50"
+    )
 
     result = graph.invoke({
         "query": query,
@@ -336,12 +476,12 @@ if __name__ == "__main__":
     print(result["plan"])
 
     print("\n=== RESULTS ===")
+
     for product in result["results"]:
         print(product)
 
     print("\n=== EVALUATION ===")
     print(result["evaluation"])
+
     print("\n=== FINAL RESPONSE ===")
     print(result["final_response"])
-
-    
